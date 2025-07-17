@@ -1,0 +1,8 @@
+# This file lists the Python dependencies for the Delve application.
+
+# The core web framework used for the backend API and serving the HTML.
+Flask
+
+# A production-grade WSGI server used to run the Flask application.
+# It's more robust and performant than Flask's built-in development server.
+gunicorn
