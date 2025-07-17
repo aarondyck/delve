@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delve - Docker Log Viewer</title>
+    <!-- Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for a modern look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* Use Inter for the main UI and Fira Code for monospaced log content */
+        body { font-family: 'Inter', sans-serif; }
+        #log-content-wrapper {
+            font-family: 'Fira Code', monospace;
+            background-color: #0d1117; /* Dark background for the log area */
+            color: #c9d1d9;
+        }
+        /* Style for highlighted search terms */
+        mark {
+            background-color: #f8e71c;
+            color: black;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col text-gray-200">
+
+    <!-- Header Section -->
+    <header class="bg-gray-800 shadow-md p-4 text-center">
+        <h1 class="text-3xl font-bold text-white">Delve</h1>
+        <p class="text-sm text-gray-400">Docker Event & Log Viewer</p>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow flex flex-col p-4 md:p-6 lg:p-8 space-y-4 overflow-hidden">
+        
+        <!-- Controls Section: Dropdowns -->
+        <div class="flex flex-col md:flex-row gap-4">
+            <div class="flex-1">
+                <label for="container-select" class="block text-sm font-medium text-gray-400 mb-1">Container</label>
+                <select id="container-select" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="">Select a container...</option>
+                </select>
+            </div>
+
+            <div class="flex-1">
+                <label for="logfile-select" class="block text-sm font-medium text-gray-400 mb-1">Log File</label>
+                <select id="logfile-select" disabled class="w-full bg-gray-700 border border-gray-600 text-white rounded-md shadow-sm p-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <option value="">Select a log file...</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Search Input -->
+        <div>
+            <label for="search-input" class="block text-sm font-medium text-gray-400 mb-1">Search Log</label>
+            <input type="search" id="search-input" placeholder="Search current log..." disabled class="w-full bg-gray-700 border border-gray-600 text-white rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+        </div>
+
+        <!-- Log Content Display Area -->
+        <div class="flex-grow flex flex-col bg-gray-800 rounded-lg shadow-inner overflow-hidden">
+            <div id="log-content-wrapper" class="flex-grow p-4 overflow-auto">
+                <pre id="log-content" class="whitespace-pre-wrap break-words"></pre>
+                <div id="loading-indicator" class="hidden text-center text-gray-500 p-8">
+                    Loading log content...
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Element References ---
+            const containerSelect = document.getElementById('container-select');
+            const logfileSelect = document.getElementById('logfile-select');
+            const searchInput = document.getElementById('search-input');
+            const logContent = document.getElementById('log-content');
+            const loadingIndicator = document.getElementById('loading-indicator');
+
+            // Store the original log content to avoid re-fetching during search
+            let originalLogContent = '';
+
+            // --- Helper Functions ---
+
+            // Toggles the disabled state of controls during API calls
+            const setControlsState = (isLoading) => {
+                containerSelect.disabled = isLoading;
+                logfileSelect.disabled = isLoading || containerSelect.value === '';
+                searchInput.disabled = isLoading || logfileSelect.value === '';
+                if (isLoading) {
+                    loadingIndicator.classList.remove('hidden');
+                    logContent.classList.add('hidden');
+                } else {
+                    loadingIndicator.classList.add('hidden');
+                    logContent.classList.remove('hidden');
+                }
+            };
+
+            // Clears the log display and search input
+            const clearLogDisplay = () => {
+                logContent.innerHTML = '';
+                originalLogContent = '';
+                searchInput.value = '';
+            };
+
+            // Safely escapes HTML to prevent XSS from log content
+            const escapeHTML = (str) => {
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            };
+
+            // --- Data Fetching Functions ---
+
+            // Fetches the list of containers from the backend
+            async function loadContainers() {
+                try {
+                    const response = await fetch('/api/containers');
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const containers = await response.json();
+                    
+                    containerSelect.innerHTML = '<option value="">Select a container...</option>';
+                    containers.forEach(container => {
+                        const option = new Option(container, container);
+                        containerSelect.add(option);
+                    });
+                } catch (error) {
+                    console.error("Failed to load containers:", error);
+                    logContent.textContent = `Error loading containers: ${error.message}`;
+                }
+            }
+
+            // Fetches the list of log files for the selected container
+            async function loadLogFiles(containerName) {
+                logfileSelect.innerHTML = '<option value="">Loading files...</option>';
+                setControlsState(true);
+                clearLogDisplay();
+                
+                try {
+                    const response = await fetch(`/api/logs/${containerName}`);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const logfiles = await response.json();
+
+                    logfileSelect.innerHTML = '<option value="">Select a log file...</option>';
+                    logfiles.forEach(file => {
+                        const option = new Option(file, file);
+                        logfileSelect.add(option);
+                    });
+                    
+                    // Auto-select the "current" log file, assuming it starts with the container name
+                    const currentLogFile = logfiles.find(f => f.startsWith(containerName));
+                    if (currentLogFile) {
+                        logfileSelect.value = currentLogFile;
+                        await loadLogContent(containerName, currentLogFile);
+                    }
+                } catch (error) {
+                    console.error("Failed to load log files:", error);
+                    logContent.textContent = `Error loading log files: ${error.message}`;
+                } finally {
+                    setControlsState(false);
+                }
+            }
+
+            // Fetches and displays the content of the selected log file
+            async function loadLogContent(containerName, logfileName) {
+                setControlsState(true);
+                clearLogDisplay();
+
+                try {
+                    const response = await fetch(`/api/log/${containerName}/${logfileName}`);
+                    if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+                    
+                    originalLogContent = await response.text();
+                    logContent.textContent = originalLogContent;
+                } catch (error) {
+                    console.error("Failed to load log content:", error);
+                    originalLogContent = `Error loading log content: ${error.message}`;
+                    logContent.textContent = originalLogContent;
+                } finally {
+                    setControlsState(false);
+                }
+            }
+            
+            // Filters and highlights log content based on search input
+            function handleSearch() {
+                const searchTerm = searchInput.value.trim();
+
+                if (!searchTerm) {
+                    logContent.textContent = originalLogContent; // Restore original content
+                    return;
+                }
+
+                const searchRegex = new RegExp(searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+                const lines = originalLogContent.split('\n');
+                
+                // Filter lines that match the search term and highlight the matches
+                const highlightedLines = lines.map(line => {
+                    if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
+                        return escapeHTML(line).replace(searchRegex, '<mark>$&</mark>');
+                    }
+                    return null; // Return null for non-matching lines
+                }).filter(line => line !== null); // Remove the null entries
+
+                if(highlightedLines.length > 0) {
+                    logContent.innerHTML = highlightedLines.join('\n');
+                } else {
+                    logContent.innerHTML = `<div class="text-gray-500">No lines matching "${escapeHTML(searchTerm)}".</div>`;
+                }
+            }
+
+            // --- Event Listeners ---
+
+            containerSelect.addEventListener('change', () => {
+                const containerName = containerSelect.value;
+                logfileSelect.innerHTML = '<option value="">Select a log file...</option>';
+                clearLogDisplay();
+                
+                if (containerName) {
+                    loadLogFiles(containerName);
+                } else {
+                    setControlsState(false);
+                }
+            });
+
+            logfileSelect.addEventListener('change', () => {
+                const containerName = containerSelect.value;
+                const logfileName = logfileSelect.value;
+                if (containerName && logfileName) {
+                    loadLogContent(containerName, logfileName);
+                } else {
+                    clearLogDisplay();
+                    setControlsState(false);
+                }
+            });
+            
+            searchInput.addEventListener('input', handleSearch);
+
+            // --- Initial Load ---
+            loadContainers();
+        });
+    </script>
+</body>
+</html>
