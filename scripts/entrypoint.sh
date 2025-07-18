@@ -1,24 +1,45 @@
 #!/bin/bash
 # This script is the entrypoint for the Delve Docker container.
-# It starts the necessary background services and then the main web application.
+# It handles setting user permissions and then starts the application services.
 
-# Enable Job Control, which allows us to run processes in the background.
-set -m
+# Exit immediately if a command exits with a non-zero status.
+set -e
 
-echo "--- Starting Delve Services ---"
+# --- User and Group ID Setup ---
+# Check if the PUID and PGID environment variables are set.
+if [ -n "$PUID" ] && [ -n "$PGID" ]; then
+    # Get the current UID and GID of the 'delve' user.
+    CURRENT_UID=$(id -u delve)
+    CURRENT_GID=$(id -g delve)
 
-# Start the logging daemon script in the background.
-# Its output will go to the container's stdout/stderr, which can be viewed with 'docker logs'.
-echo "[INFO] Starting logging daemon..."
-/usr/local/bin/docker-log-daemon.sh &
+    # If the provided IDs are different from the current ones, update them.
+    if [ "$PUID" != "$CURRENT_UID" ] || [ "$PGID" != "$CURRENT_GID" ]; then
+        echo "Updating delve user with UID: ${PUID} and GID: ${PGID}"
+        # Use -o to allow non-unique (duplicate) IDs.
+        groupmod -o -g "$PGID" delve
+        usermod -o -u "$PUID" delve
+    fi
+fi
 
-# Start the Gunicorn web server in the foreground.
-# 'exec' replaces the current shell process with the gunicorn process. This is crucial
-# because it makes gunicorn the main process (PID 1) of the container, allowing Docker
-# to correctly manage the container's lifecycle and handle signals like SIGTERM.
-#
-# --bind: Binds Gunicorn to all network interfaces on port 5001.
-# --chdir: Changes the working directory to /app so Gunicorn can find the 'app' module.
-# app:app: Tells Gunicorn to run the 'app' object from the 'app' module (app.py).
-echo "[INFO] Starting web server..."
-exec gunicorn --bind 0.0.0.0:5001 --chdir /app app:app
+# --- Permissions Setup ---
+# Ensure the /data directory is owned by the delve user and group.
+# This is critical for allowing the non-root process to write logs
+# and manage the exclusion list in the mounted volume.
+echo "Ensuring /data directory permissions..."
+chown -R delve:delve /data
+
+echo "--- Starting Delve Services as user 'delve' ---"
+
+# Use gosu to drop root privileges and execute the rest of the startup
+# process as the 'delve' user.
+# We use 'bash -c' to run a sub-shell that can handle backgrounding the daemon.
+# The final 'exec' is important for proper signal handling by Docker.
+exec gosu delve bash -c '
+  set -m # Enable Job Control for the sub-shell
+
+  echo "[INFO] Starting logging daemon..."
+  /usr/local/bin/docker-log-daemon.sh &
+
+  echo "[INFO] Starting web server..."
+  exec gunicorn --bind 0.0.0.0:5001 --chdir /app app:app
+'
