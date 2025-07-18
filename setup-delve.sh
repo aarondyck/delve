@@ -181,7 +181,6 @@ echo "  Published Port:    ${PUBLISHED_PORT}"
 echo "  Persistent Volume: ${PERSISTENT_VOLUME}"
 
 cat > docker-compose.yml << EOF
-version: '3.8'
 services:
   delve:
     image: aarondyck/delve:latest
