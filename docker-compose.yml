@@ -5,9 +5,9 @@ version: '3.8'
 services:
   # The main application service, named 'delve'.
   delve:
-    # Specifies the build context. '.' means it will look for the Dockerfile
-    # in the current directory (the project root).
-    build: .
+    # Pull the image directly from Docker Hub.
+    # This replaces the 'build: .' line.
+    image: aarondyck/delve:latest
     
     # Assigns a specific, predictable name to the container.
     container_name: delve-app
@@ -31,4 +31,7 @@ services:
       # Mounts a local directory from the project root into the container.
       # The logging daemon will write logs here, making them persistent
       # and accessible on the host machine.
-      - ./generated-logs:/var/log/docker
+      - ./generated-logs:/data/logs
+      
+      # Mounts the local directory to hold the exclusion list.
+      - ./data:/data
