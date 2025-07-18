@@ -196,4 +196,12 @@ EOF
 
 echo
 echo -e "${GREEN}✅ Success! 'docker-compose.yml' has been created.${NC}"
-echo "Run 'docker-compose up -d' to start Delve."
+
+if prompt_yes_no "Would you like to start the Delve container now?" "Y"; then
+    echo -e "${GREEN}[INFO]${NC} Starting Delve... (running 'docker compose up -d')"
+    docker compose up -d
+    echo -e "${GREEN}✅ Delve is running! You can access it at http://localhost:${PUBLISHED_PORT}${NC}"
+else
+    echo
+    echo "You can start Delve later by running 'docker compose up -d' in this directory."
+fi
