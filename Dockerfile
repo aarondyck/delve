@@ -23,10 +23,12 @@ COPY app/ /app/
 # Copy the utility scripts into a standard executable path in the container.
 COPY scripts/docker-log-daemon.sh /usr/local/bin/
 COPY scripts/entrypoint.sh /usr/local/bin/
+COPY scripts/manage-logs.sh /usr/local/bin/ 
 
 # Make the scripts executable so they can be run.
 RUN chmod +x /usr/local/bin/docker-log-daemon.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/manage-logs.sh
 
 # Inform Docker that the container listens on this port at runtime.
 EXPOSE 5001
