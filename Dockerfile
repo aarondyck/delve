@@ -1,5 +1,5 @@
-# Specifies the base image. Using a specific, slim version is a good practice.
-FROM python:3.9-slim-buster
+# Specifies the base image.
+FROM python:3.9-slim-bookworm
 
 # Install the Docker CLI client, which the logging daemon needs to interact
 # with the host's Docker service. Chaining commands and cleaning up reduces image size.
@@ -23,7 +23,7 @@ COPY app/ /app/
 # Copy the utility scripts into a standard executable path in the container.
 COPY scripts/docker-log-daemon.sh /usr/local/bin/
 COPY scripts/entrypoint.sh /usr/local/bin/
-COPY scripts/manage-logs.sh /usr/local/bin/ 
+COPY scripts/manage-logs.sh /usr/local/bin/
 
 # Make the scripts executable so they can be run.
 RUN chmod +x /usr/local/bin/docker-log-daemon.sh
