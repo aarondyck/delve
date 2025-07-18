@@ -1,37 +1,10 @@
-# Specifies the Docker Compose file format version.
-version: '3.8'
-
-# Defines the services (containers) that make up the application.
 services:
-  # The main application service, named 'delve'.
   delve:
-    # Pull the image directly from Docker Hub.
-    # This replaces the 'build: .' line.
     image: aarondyck/delve:latest
-    
-    # Assigns a specific, predictable name to the container.
     container_name: delve-app
-    
-    # Sets the restart policy. 'unless-stopped' ensures the container
-    # restarts automatically unless it was explicitly stopped.
     restart: unless-stopped
-    
-    # Maps a port on the host machine to a port inside the container.
-    # Format: "HOST:CONTAINER"
     ports:
       - "5001:5001"
-      
-    # Mounts host paths or volumes into the container.
     volumes:
-      # Mounts the Docker socket from the host into the container (read-only).
-      # This is critical for the logging daemon to see and interact with
-      # other containers running on the host.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      
-      # Mounts a local directory from the project root into the container.
-      # The logging daemon will write logs here, making them persistent
-      # and accessible on the host machine.
-      - ./generated-logs:/data/logs
-      
-      # Mounts the local directory to hold the exclusion list.
       - ./data:/data
