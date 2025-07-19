@@ -36,14 +36,15 @@ def index():
 @app.route('/api/containers')
 def list_containers():
     """API endpoint to get a list of container subdirectories."""
-    if not os.path.isdir(LOG_DIR):
-        return jsonify({"error": f"Log directory not found: {LOG_DIR}"}), 500
-        
-    try
+    try:
         # List all items in the log directory that are themselves directories.
         containers = [d for d in os.listdir(LOG_DIR) if os.path.isdir(os.path.join(LOG_DIR, d))]
         return jsonify(sorted(containers))
+    except FileNotFoundError:
+        # Handle the specific case where the log directory itself doesn't exist yet.
+        return jsonify({"error": f"Log directory not found: {LOG_DIR}"}), 500
     except OSError as e:
+        # Handle other potential OS-level errors like permission issues.
         return jsonify({"error": f"Error reading log directory: {e}"}), 500
 
 @app.route('/api/daemon-log')
