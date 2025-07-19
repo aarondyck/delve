@@ -1,11 +1,22 @@
 #!/bin/bash
 # This script is the entrypoint for the Delve Docker container.
-# It handles setting user permissions and then starts the application services.
+# It handles cleanup, sets user permissions, and then starts the application services.
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# --- User and Group ID Setup ---
+# --- Cleanup Task (runs as root) ---
+# Check if the setup script requested a cleanup of the data directory.
+if [ -f "/data/.del_files" ]; then
+    echo "[INFO] Cleanup marker found. Removing existing log data..."
+    # Remove all contents of the logs directory.
+    rm -rf /data/logs/*
+    # Remove the marker file itself.
+    rm -f /data/.del_files
+    echo "[INFO] Cleanup complete."
+fi
+
+# --- User and Group ID Setup (runs as root) ---
 # Check if the PUID and PGID environment variables are set.
 if [ -n "$PUID" ] && [ -n "$PGID" ]; then
     # Get the current UID and GID of the 'delve' user.
@@ -21,7 +32,7 @@ if [ -n "$PUID" ] && [ -n "$PGID" ]; then
     fi
 fi
 
-# --- Permissions Setup ---
+# --- Permissions Setup (runs as root) ---
 # Ensure the /data directory is owned by the delve user and group.
 # This is critical for allowing the non-root process to write logs
 # and manage the exclusion list in the mounted volume.
@@ -32,8 +43,6 @@ echo "--- Starting Delve Services as user 'delve' ---"
 
 # Use gosu to drop root privileges and execute the rest of the startup
 # process as the 'delve' user.
-# We use 'bash -c' to run a sub-shell that can handle backgrounding the daemon.
-# The final 'exec' is important for proper signal handling by Docker.
 exec gosu delve bash -c '
   set -m # Enable Job Control for the sub-shell
 
