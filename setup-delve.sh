@@ -78,15 +78,23 @@ handle_persistent_volume() {
                         fi
                         return 0 ;;
                     3)
-                        echo -e "${RED}[DANGER]${NC} This will permanently delete all files and folders inside '${PERSISTENT_VOLUME}'."
+                        echo -e "${RED}[DANGER]${NC} This will attempt to remove all files and folders inside '${PERSISTENT_VOLUME}'."
                         read -p "   To confirm, please type 'yes': " confirmation
                         if [ "$confirmation" == "yes" ]; then
-                            rm -rf "${PERSISTENT_VOLUME:?}/"*
+                            # Try to remove the data. If it fails, create a marker file for the container to handle it.
+                            if ! rm -rf "${PERSISTENT_VOLUME:?}/"* 2>/dev/null; then
+                                echo -e "${YELLOW}[WARN]${NC} Could not remove data due to permission errors."
+                                echo -e "${GREEN}[INFO]${NC} A cleanup task will be scheduled to run inside the container on next start."
+                                # Create the marker file.
+                                touch "${PERSISTENT_VOLUME}/.del_files"
+                            else
+                                echo -e "${GREEN}[INFO]${NC} Existing data removed."
+                            fi
                             mkdir -p "${PERSISTENT_VOLUME}/logs"
-                            echo -e "${GREEN}[INFO]${NC} Existing data removed and 'logs' subfolder created."
+                            echo -e "${GREEN}[INFO]${NC} 'logs' subfolder created."
                             return 0
                         else
-                            echo -e "${GREEN}[INFO]${NC} Operation cancelled."
+                            echo -e "${GREEN}[INFO]${NC} Operation cancelled. No data was removed."
                         fi ;;
                     *) echo -e "${RED}[ERROR]${NC} Invalid selection." ;;
                 esac
@@ -157,15 +165,7 @@ fi
 # 2. Validate Persistent Volume
 handle_persistent_volume
 
-# 3. Set Permissions on Persistent Volume
-SUDO_CMD=""
-if [ "$(id -u)" -ne 0 ]; then
-    SUDO_CMD="sudo"
-fi
-echo -e "${GREEN}[INFO]${NC} Setting ownership of ${PERSISTENT_VOLUME} to ${PUID}:${PGID}..."
-$SUDO_CMD chown -R "${PUID}:${PGID}" "${PERSISTENT_VOLUME}"
-
-# 4. Final File Generation
+# 3. Final File Generation
 echo
 echo -e "${GREEN}[INFO]${NC} Creating 'docker-compose.yml'..."
 
