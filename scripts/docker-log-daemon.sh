@@ -1,15 +1,10 @@
 #!/bin/bash
-# This script runs as root to log Docker containers from the host,
-# while setting file ownership based on PUID/PGID environment variables.
+# This script runs as root to log Docker containers from the host.
 
 # --- Configuration ---
 LOG_DIR="/data/logs"
 DAEMON_LOG_FILE="${LOG_DIR}/daemon.log"
 EXCLUDE_FILE="/data/exclude.list"
-
-# Default to root (0) if PUID/PGID are not set.
-PUID=${PUID:-0}
-PGID=${PGID:-0}
 
 # Get the container's own ID at startup to avoid logging itself.
 MY_CONTAINER_ID=$(hostname)
@@ -22,11 +17,7 @@ declare -A container_start_times
 
 # Logs the daemon's own activity for debugging.
 log_message() {
-    # Ensure the directory and file exist with the correct ownership before writing.
     mkdir -p "$(dirname "$DAEMON_LOG_FILE")"
-    chown "${PUID}:${PGID}" "$(dirname "$DAEMON_LOG_FILE")"
-    touch "$DAEMON_LOG_FILE"
-    chown "${PUID}:${PGID}" "$DAEMON_LOG_FILE"
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$DAEMON_LOG_FILE"
 }
 
@@ -41,8 +32,6 @@ archive_log() {
         local archive_file="${container_log_dir}/${container_name}-${timestamp}.log.archived"
         log_message "Archiving ${log_file} to ${archive_file}"
         mv "$log_file" "$archive_file"
-        # Ensure the archived file has the correct ownership.
-        chown "${PUID}:${PGID}" "$archive_file"
     fi
 }
 
@@ -52,16 +41,12 @@ start_logging_for() {
     local container_log_dir="${LOG_DIR}/${container_name}"
     local log_file="${container_log_dir}/${container_name}.log"
     
-    # Create directory and set ownership.
     mkdir -p "$container_log_dir"
-    chown "${PUID}:${PGID}" "$container_log_dir"
     
     log_message "Starting log watch for container: ${container_name}"
     archive_log "$container_name"
     
-    # Create the log file and set ownership before redirecting output to it.
     touch "$log_file"
-    chown "${PUID}:${PGID}" "$log_file"
 
     /usr/bin/docker logs -f "$container_name" >> "$log_file" 2>&1 &
     
@@ -85,7 +70,6 @@ stop_logging_for() {
 # --- Main Execution ---
 
 log_message "--- Docker Log Daemon Started (running as root) ---"
-log_message "File ownership will be set to PUID=${PUID} and PGID=${PGID}."
 
 # Gracefully shut down logging processes on exit.
 cleanup() {
