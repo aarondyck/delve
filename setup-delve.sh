@@ -12,9 +12,6 @@ CONTAINER_NAME="delve-app"
 RESTART_POLICY="unless-stopped"
 PUBLISHED_PORT="5001"
 PERSISTENT_VOLUME="./data"
-# Get the current user's ID to use as a sensible default.
-PUID=$(id -u)
-PGID=$(id -g)
 
 # --- Helper Functions ---
 prompt_yes_no() {
@@ -81,15 +78,7 @@ handle_persistent_volume() {
                         echo -e "${RED}[DANGER]${NC} This will attempt to remove all files and folders inside '${PERSISTENT_VOLUME}'."
                         read -p "   To confirm, please type 'yes': " confirmation
                         if [ "$confirmation" == "yes" ]; then
-                            # Try to remove the data. If it fails, create a marker file for the container to handle it.
-                            if ! rm -rf "${PERSISTENT_VOLUME:?}/"* 2>/dev/null; then
-                                echo -e "${YELLOW}[WARN]${NC} Could not remove data due to permission errors."
-                                echo -e "${GREEN}[INFO]${NC} A cleanup task will be scheduled to run inside the container on next start."
-                                # Create the marker file.
-                                touch "${PERSISTENT_VOLUME}/.del_files"
-                            else
-                                echo -e "${GREEN}[INFO]${NC} Existing data removed."
-                            fi
+                            rm -rf "${PERSISTENT_VOLUME:?}/"*
                             mkdir -p "${PERSISTENT_VOLUME}/logs"
                             echo -e "${GREEN}[INFO]${NC} 'logs' subfolder created."
                             return 0
@@ -118,8 +107,6 @@ echo "  Container Name:    ${CONTAINER_NAME}"
 echo "  Restart Policy:    ${RESTART_POLICY}"
 echo "  Published Port:    ${PUBLISHED_PORT}"
 echo "  Persistent Volume: ${PERSISTENT_VOLUME}"
-echo "  User ID (PUID):    ${PUID}"
-echo "  Group ID (PGID):   ${PGID}"
 echo
 
 INTERACTIVE_MODE=false
@@ -156,10 +143,6 @@ else
             PUBLISHED_PORT=$new_port; break
         fi
     done
-
-    echo "4. User and Group IDs:"
-    read -p "   Enter PUID (User ID) [${PUID}]: " new_puid; PUID=${new_puid:-$PUID}
-    read -p "   Enter PGID (Group ID) [${PGID}]: " new_pgid; PGID=${new_pgid:-$PGID}
 fi
 
 # 2. Validate Persistent Volume
@@ -177,9 +160,6 @@ services:
     restart: ${RESTART_POLICY}
     ports:
       - "${PUBLISHED_PORT}:5001"
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${PERSISTENT_VOLUME}:/data
