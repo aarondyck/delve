@@ -4,11 +4,13 @@ FROM python:3.9-slim-bookworm
 # Install dependencies:
 # - docker.io: The Docker CLI client for the logging daemon.
 # - ca-certificates & wget: Needed to securely download gosu.
+# - gnupg: Provides the 'gpg' command needed to verify the gosu download.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     docker.io \
     ca-certificates \
-    wget && \
+    wget \
+    gnupg && \
     rm -rf /var/lib/apt/lists/*
 
 # Install gosu, a lightweight tool for dropping root privileges.
