@@ -12,6 +12,9 @@ CONTAINER_NAME="delve-app"
 RESTART_POLICY="unless-stopped"
 PUBLISHED_PORT="5001"
 PERSISTENT_VOLUME="./data"
+# Get the current user's ID to use as a sensible default.
+PUID=$(id -u)
+PGID=$(id -g)
 
 # --- Helper Functions ---
 prompt_yes_no() {
@@ -107,6 +110,8 @@ echo "  Container Name:    ${CONTAINER_NAME}"
 echo "  Restart Policy:    ${RESTART_POLICY}"
 echo "  Published Port:    ${PUBLISHED_PORT}"
 echo "  Persistent Volume: ${PERSISTENT_VOLUME}"
+echo "  User ID (PUID):    ${PUID}"
+echo "  Group ID (PGID):   ${PGID}"
 echo
 
 INTERACTIVE_MODE=false
@@ -143,6 +148,10 @@ else
             PUBLISHED_PORT=$new_port; break
         fi
     done
+    
+    echo "4. User and Group IDs:"
+    read -p "   Enter PUID (User ID) [${PUID}]: " new_puid; PUID=${new_puid:-$PUID}
+    read -p "   Enter PGID (Group ID) [${PGID}]: " new_pgid; PGID=${new_pgid:-$PGID}
 fi
 
 # 2. Validate Persistent Volume
@@ -160,6 +169,9 @@ services:
     restart: ${RESTART_POLICY}
     ports:
       - "${PUBLISHED_PORT}:5001"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${PERSISTENT_VOLUME}:/data
