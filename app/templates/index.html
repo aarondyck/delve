@@ -11,14 +11,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        /* Use Inter for the main UI and Fira Code for monospaced log content */
         body { font-family: 'Inter', sans-serif; }
         #log-content-wrapper {
             font-family: 'Fira Code', monospace;
-            background-color: #0d1117; /* Dark background for the log area */
+            background-color: #0d1117;
             color: #c9d1d9;
         }
-        /* Style for highlighted search terms */
         mark {
             background-color: #f8e71c;
             color: black;
@@ -30,9 +28,12 @@
 <body class="h-full flex flex-col text-gray-200">
 
     <!-- Header Section -->
-    <header class="bg-gray-800 shadow-md p-4 text-center">
+    <header class="bg-gray-800 shadow-md p-4 text-center relative">
         <h1 class="text-3xl font-bold text-white">Delve</h1>
         <p class="text-sm text-gray-400">Docker Event & Log Viewer</p>
+        <button id="daemon-log-btn" class="absolute top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm">
+            View Daemon Log
+        </button>
     </header>
 
     <!-- Main Content Area -->
@@ -80,17 +81,15 @@
             const searchInput = document.getElementById('search-input');
             const logContent = document.getElementById('log-content');
             const loadingIndicator = document.getElementById('loading-indicator');
+            const daemonLogBtn = document.getElementById('daemon-log-btn');
 
-            // Store the original log content to avoid re-fetching during search
             let originalLogContent = '';
 
             // --- Helper Functions ---
-
-            // Toggles the disabled state of controls during API calls
             const setControlsState = (isLoading) => {
                 containerSelect.disabled = isLoading;
                 logfileSelect.disabled = isLoading || containerSelect.value === '';
-                searchInput.disabled = isLoading || logfileSelect.value === '';
+                searchInput.disabled = isLoading || logfileSelect.value === '' && !originalLogContent;
                 if (isLoading) {
                     loadingIndicator.classList.remove('hidden');
                     logContent.classList.add('hidden');
@@ -100,21 +99,17 @@
                 }
             };
 
-            // Clears the log display and search input
             const clearLogDisplay = () => {
                 logContent.innerHTML = '';
                 originalLogContent = '';
                 searchInput.value = '';
             };
 
-            // Safely escapes HTML to prevent XSS from log content
             const escapeHTML = (str) => {
                 return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
             };
 
             // --- Data Fetching Functions ---
-
-            // Fetches the list of containers from the backend
             async function loadContainers() {
                 try {
                     const response = await fetch('/api/containers');
@@ -132,7 +127,6 @@
                 }
             }
 
-            // Fetches the list of log files for the selected container
             async function loadLogFiles(containerName) {
                 logfileSelect.innerHTML = '<option value="">Loading files...</option>';
                 setControlsState(true);
@@ -149,7 +143,6 @@
                         logfileSelect.add(option);
                     });
                     
-                    // Auto-select the "current" log file, assuming it starts with the container name
                     const currentLogFile = logfiles.find(f => f.startsWith(containerName));
                     if (currentLogFile) {
                         logfileSelect.value = currentLogFile;
@@ -163,7 +156,6 @@
                 }
             }
 
-            // Fetches and displays the content of the selected log file
             async function loadLogContent(containerName, logfileName) {
                 setControlsState(true);
                 clearLogDisplay();
@@ -182,26 +174,47 @@
                     setControlsState(false);
                 }
             }
+
+            async function loadDaemonLog() {
+                // Deselect any chosen container
+                containerSelect.value = "";
+                logfileSelect.innerHTML = '<option value="">Select a log file...</option>';
+
+                setControlsState(true);
+                clearLogDisplay();
+
+                try {
+                    const response = await fetch('/api/daemon-log');
+                    if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+                    
+                    originalLogContent = await response.text();
+                    logContent.textContent = originalLogContent;
+                } catch (error) {
+                    console.error("Failed to load daemon log:", error);
+                    originalLogContent = `Error loading daemon log: ${error.message}`;
+                    logContent.textContent = originalLogContent;
+                } finally {
+                    setControlsState(false);
+                }
+            }
             
-            // Filters and highlights log content based on search input
             function handleSearch() {
                 const searchTerm = searchInput.value.trim();
 
                 if (!searchTerm) {
-                    logContent.textContent = originalLogContent; // Restore original content
+                    logContent.textContent = originalLogContent;
                     return;
                 }
 
                 const searchRegex = new RegExp(searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
                 const lines = originalLogContent.split('\n');
                 
-                // Filter lines that match the search term and highlight the matches
                 const highlightedLines = lines.map(line => {
                     if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
                         return escapeHTML(line).replace(searchRegex, '<mark>$&</mark>');
                     }
-                    return null; // Return null for non-matching lines
-                }).filter(line => line !== null); // Remove the null entries
+                    return null;
+                }).filter(line => line !== null);
 
                 if(highlightedLines.length > 0) {
                     logContent.innerHTML = highlightedLines.join('\n');
@@ -211,7 +224,6 @@
             }
 
             // --- Event Listeners ---
-
             containerSelect.addEventListener('change', () => {
                 const containerName = containerSelect.value;
                 logfileSelect.innerHTML = '<option value="">Select a log file...</option>';
@@ -236,6 +248,8 @@
             });
             
             searchInput.addEventListener('input', handleSearch);
+
+            daemonLogBtn.addEventListener('click', loadDaemonLog);
 
             // --- Initial Load ---
             loadContainers();
